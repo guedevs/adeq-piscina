@@ -1,0 +1,55 @@
+print('Olá, seja bem-vindo ao sistema de adequação de piscinas!')
+
+estab = input('Digite o nome do seu condomínio: ')
+litros = float(input('Digite quantos litros sua piscina tem: '))
+
+print('\nAgora informe os parâmetros da água:')
+acid = float(input('Digite ácido cianúrico (ppm): '))
+alcal = float(input('Digite alcalinidade (ppm): '))
+cloro = float(input('Digite cloro (ppm): '))
+durez = float(input('Digite dureza cálcica (ppm): '))
+ph = float(input('Digite pH: '))
+
+print('\n--- RESULTADO DA ANÁLISE ---')
+
+# Ácido cianúrico (ideal: 30 a 50 ppm)
+if acid < 30:
+    print('Ácido cianúrico BAIXO → é necessário aumentar')
+elif acid > 50:
+    print('Ácido cianúrico ALTO → é necessário reduzir')
+else:
+    print('Ácido cianúrico OK')
+
+# Alcalinidade (ideal: 80 a 120 ppm)
+if alcal < 80:
+    print('Alcalinidade BAIXA → é necessário aumentar')
+elif alcal > 120:
+    print('Alcalinidade ALTA → é necessário reduzir')
+else:
+    print('Alcalinidade OK')
+
+# Cloro (ideal: 1 a 3 ppm)
+if cloro < 1:
+    print('Cloro BAIXO → adicionar cloro')
+elif cloro > 3:
+    print('Cloro ALTO → aguardar baixar')
+else:
+    print('Cloro OK')
+
+# Dureza cálcica (ideal: 200 a 400 ppm)
+if durez < 200:
+    print('Dureza cálcica BAIXA → adicionar elevador de dureza')
+elif durez > 400:
+    print('Dureza cálcica ALTA → risco de incrustação')
+else:
+    print('Dureza cálcica OK')
+
+# pH (ideal: 7.2 a 7.6)
+if ph < 7.2:
+    print('pH BAIXO → adicionar elevador de pH')
+elif ph > 7.6:
+    print('pH ALTO → adicionar redutor de pH')
+else:
+    print('pH OK')
+
+print('\nAnálise concluída para o condomínio:', estab)
