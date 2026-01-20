@@ -1,0 +1,235 @@
+import math
+
+print('Olá, seja bem-vindo ao sistema de adequação de piscinas!')
+
+estab = input('Digite o nome do seu condomínio: ').strip()
+litros = float(input('Digite quantos litros sua piscina tem: '))
+
+m3 = litros / 1000.0  # 1 m³ = 1000 L
+
+print('\nAgora informe os parâmetros da água:')
+acid = float(input('Digite ácido cianúrico (ppm): '))
+alcal = float(input('Digite alcalinidade total (ppm): '))
+cloro = float(input('Digite cloro livre (ppm): '))
+durez = float(input('Digite dureza cálcica (ppm): '))
+ph = float(input('Digite pH: '))
+
+print('\nEscolha as marcas dos produtos que você usa:')
+marca_cloro = input('Marca do cloro (GENCO / HTH / HIDROALL): ').strip().upper()
+marca_ph_mais = input('Marca do elevador de pH (GENCO / HTH / HIDROALL): ').strip().upper()
+marca_ph_menos = input('Marca do redutor de pH (GENCO / HTH / HIDROALL): ').strip().upper()
+marca_alcal = input('Marca do elevador de alcalinidade (GENCO / HTH / HIDROALL): ').strip().upper()
+marca_durez = input('Marca do elevador de dureza (GENCO / HTH / HIDROALL): ').strip().upper()
+
+# ---------- utilidades ----------
+def arred(x, casas=1):
+    return round(x, casas)
+
+def clamp(v, lo, hi):
+    return max(lo, min(hi, v))
+
+# ---------- REGRAS / DOSAGENS (baseadas em referências públicas) ----------
+# Alcalinidade (para subir): gramas por m³ para aumentar 10 ppm
+ALK_G_POR_M3_PARA_10PPM = {
+    "GENCO": 17.0,     # pH CERTO: 17 g/m³ -> +10 ppm
+    "HTH": 17.0,       # HTH elevador AT: 17 g/1000 L -> +10 ppm
+    "HIDROALL": 20.0,  # HidroAll AT: 20 g/m³ -> +10 ppm
+}
+
+# Dureza (para subir): gramas por 1000 L (m³) para aumentar 10 ppm
+DUREZ_G_POR_M3_PARA_10PPM = {
+    "GENCO": 15.0,     # aproximado (quando produto é CaCl2/“cálcio” similar)
+    "HTH": 15.0,       # aproximado
+    "HIDROALL": 15.0,  # Hidrocálcio: 15 g/1000 L -> +10 ppm
+}
+
+# pH para subir (pH+):
+# - HTH Elevador pH pó: pH 6,8 a 7,0 => 5 g/m³; abaixo de 6,8 => 10 g/m³
+# - HidroAll pH+ (granulado): tabela em g/1000 L (m³) para levar à faixa 7,2–7,6
+def dose_ph_mais(marca: str, ph_atual: float) -> str:
+    marca = marca.upper()
+
+    if ph_atual >= 7.2:
+        return "pH não está baixo o suficiente para recomendar pH+ por regra automática."
+
+    if marca == "HTH":
+        if 6.8 <= ph_atual <= 7.0:
+            g = 5.0 * m3
+            return f"Adicionar ~{arred(g)} g de HTH Elevador de pH (pó)."
+        else:  # abaixo de 6,8
+            g = 10.0 * m3
+            return f"Adicionar ~{arred(g)} g de HTH Elevador de pH (pó)."
+
+    if marca == "HIDROALL" or marca == "GENCO":
+        # Usando a tabela do HidroAll pH+ granulado (g por 1.000 L)
+        # pH 7,2 -> 5 a 10 g/m³
+        # pH 7,0 -> 10 a 20 g/m³
+        # (interpolação simples/por faixa)
+        if 7.0 < ph_atual < 7.2:
+            g_min = 5.0 * m3
+            g_max = 10.0 * m3
+            return f"Adicionar entre {arred(g_min)} g e {arred(g_max)} g de pH+ (granulado)."
+        elif ph_atual <= 7.0:
+            g_min = 10.0 * m3
+            g_max = 20.0 * m3
+            return f"Adicionar entre {arred(g_min)} g e {arred(g_max)} g de pH+ (granulado)."
+        else:
+            # ph_atual <= 7,2 mas pode cair na borda
+            g = 5.0 * m3
+            return f"Adicionar ~{arred(g)} g de pH+ (granulado) e retestar."
+
+    return "Marca não reconhecida para pH+."
+
+# pH para baixar (pH-):
+# - GENCO: pH 7,8 a 8,0 => 10 mL/m³; acima de 8,0 => 20 mL/m³
+# - HIDROALL: pH 7,6 a 8,0 => 7 mL/m³; acima de 8,0 => 18 mL/m³
+# - HTH Extra Forte: 5 mL/m³ reduz ~0,2 pH (e ~10 ppm AT)
+def dose_ph_menos(marca: str, ph_atual: float) -> str:
+    marca = marca.upper()
+
+    if ph_atual <= 7.6:
+        return "pH não está alto o suficiente para recomendar pH- por regra automática."
+
+    if marca == "GENCO":
+        if 7.8 <= ph_atual <= 8.0:
+            ml = 10.0 * m3
+            return f"Adicionar ~{arred(ml)} mL de pH- (GENCO) e retestar no dia seguinte."
+        elif ph_atual > 8.0:
+            ml = 20.0 * m3
+            return f"Adicionar ~{arred(ml)} mL de pH- (GENCO) e retestar no dia seguinte."
+        else:
+            # faixa 7,6–7,8 (sem tabela explícita na mesma referência); usa aproximação conservadora
+            ml = 10.0 * m3
+            return f"Adicionar ~{arred(ml)} mL de pH- (GENCO) de forma conservadora e retestar."
+
+    if marca == "HIDROALL":
+        if 7.6 <= ph_atual <= 8.0:
+            ml = 7.0 * m3
+            return f"Adicionar ~{arred(ml)} mL de Hidro pH- e retestar."
+        else:  # > 8.0
+            ml = 18.0 * m3
+            return f"Adicionar ~{arred(ml)} mL de Hidro pH- e retestar."
+
+    if marca == "HTH":
+        # regra do Extra Forte: cada 5 mL/m³ reduz ~0,2 pH
+        # vamos mirar pH alvo 7,4 (meio da faixa)
+        alvo = 7.4
+        delta = ph_atual - alvo
+        passos_02 = math.ceil(delta / 0.2)
+        ml = passos_02 * 5.0 * m3
+        ml = max(5.0 * m3, ml)  # pelo menos 1 "passo"
+        return f"Adicionar ~{arred(ml)} mL de HTH Redutor (Extra Forte) para aproximar de pH {alvo} e retestar."
+
+    return "Marca não reconhecida para pH-."
+
+# Cloro (regra simples por manutenção, quando baixo)
+# - GENCO L.E.: 3 a 4 g/m³ diariamente
+# - HTH Dicloro estabilizado: ~4 g/1000 L
+# - HidroAll HCL Plus: 4 g/1000 L (inicial) e 2 g/1000 L (manutenção)
+def dose_cloro(marca: str, cloro_atual: float) -> str:
+    marca = marca.upper()
+
+    if 1.0 <= cloro_atual <= 3.0:
+        return "Cloro OK (1 a 3 ppm)."
+
+    if cloro_atual > 3.0:
+        return "Cloro ALTO → aguardar baixar naturalmente (evite adicionar mais produto)."
+
+    # cloro < 1
+    if marca == "GENCO":
+        # se estiver zerado, usar o topo (4 g/m³); se estiver só baixo, usar 3 g/m³
+        g_por_m3 = 4.0 if cloro_atual <= 0.0 else 3.0
+        g = g_por_m3 * m3
+        return f"Adicionar ~{arred(g)} g de cloro GENCO (regra diária {g_por_m3} g/m³) e retestar."
+
+    if marca == "HTH":
+        # regra típica do dicloro estabilizado (aprox.): 4 g/m³
+        g_por_m3 = 4.0 if cloro_atual <= 0.0 else 2.0
+        g = g_por_m3 * m3
+        return f"Adicionar ~{arred(g)} g de cloro HTH (aprox. {g_por_m3} g/m³) e retestar."
+
+    if marca == "HIDROALL":
+        # HCL PLUS: 4 g/1000 L (inicial) e 2 g/1000 L (manutenção)
+        g_por_m3 = 4.0 if cloro_atual <= 0.0 else 2.0
+        g = g_por_m3 * m3
+        return f"Adicionar ~{arred(g)} g de cloro HidroAll (HCL Plus: {g_por_m3} g/m³) e retestar."
+
+    return "Marca não reconhecida para cloro."
+
+# Ácido cianúrico (estabilização): alvo 50 ppm em piscina externa (regra GENCO)
+def dose_acido_cianurico(acid_atual: float) -> str:
+    alvo = 50.0
+    if acid_atual < 30.0:
+        delta = alvo - acid_atual
+        # 1 ppm ~ 1 g por 1000 L (quando produto é majoritariamente ácido cianúrico)
+        g = delta * m3
+        return f"Ácido cianúrico BAIXO → para chegar a ~{alvo} ppm, adicionar ~{arred(g)} g de estabilizante (ácido cianúrico) e retestar depois."
+    elif acid_atual > 50.0:
+        return "Ácido cianúrico ALTO → reduzir (normalmente só com diluição/troca parcial de água)."
+    else:
+        return "Ácido cianúrico OK (30 a 50 ppm)."
+
+# Alcalinidade (subir): alvo 100 ppm (meio da faixa 80–120)
+def dose_alcalinidade(marca: str, alcal_atual: float) -> str:
+    if 80.0 <= alcal_atual <= 120.0:
+        return "Alcalinidade OK (80 a 120 ppm)."
+
+    if alcal_atual > 120.0:
+        return "Alcalinidade ALTA → reduzir (normalmente com redutor/ácido conforme orientação do produto)."
+
+    marca = marca.upper()
+    alvo = 100.0
+    delta = alvo - alcal_atual
+    g10 = ALK_G_POR_M3_PARA_10PPM.get(marca)
+
+    if g10 is None:
+        return "Alcalinidade BAIXA → (marca não reconhecida para cálculo)."
+
+    g = (delta / 10.0) * g10 * m3
+    g = max(0.0, g)
+    return f"Alcalinidade BAIXA → para chegar a ~{alvo} ppm, adicionar ~{arred(g)} g de elevador de alcalinidade ({marca})."
+
+# Dureza cálcica (subir): alvo 300 ppm (meio da faixa 200–400)
+def dose_dureza(marca: str, durez_atual: float) -> str:
+    if 200.0 <= durez_atual <= 400.0:
+        return "Dureza cálcica OK (200 a 400 ppm)."
+
+    if durez_atual > 400.0:
+        return "Dureza cálcica ALTA → risco de incrustação (geralmente reduz com diluição/troca parcial de água)."
+
+    marca = marca.upper()
+    alvo = 300.0
+    delta = alvo - durez_atual
+    g10 = DUREZ_G_POR_M3_PARA_10PPM.get(marca)
+
+    if g10 is None:
+        return "Dureza cálcica BAIXA → (marca não reconhecida para cálculo)."
+
+    g = (delta / 10.0) * g10 * m3
+    g = max(0.0, g)
+    return f"Dureza cálcica BAIXA → para chegar a ~{alvo} ppm, adicionar ~{arred(g)} g de elevador de dureza ({marca})."
+
+# ---------- SAÍDA ----------
+print('\n--- RESULTADO DA ANÁLISE ---')
+
+# Ácido cianúrico
+print(dose_acido_cianurico(acid))
+
+# Alcalinidade
+print(dose_alcalinidade(marca_alcal, alcal))
+
+# Cloro
+print(dose_cloro(marca_cloro, cloro))
+
+# Dureza
+print(dose_dureza(marca_durez, durez))
+
+# pH
+if ph < 7.2:
+    print("pH BAIXO →", dose_ph_mais(marca_ph_mais, ph))
+elif ph > 7.6:
+    print("pH ALTO →", dose_ph_menos(marca_ph_menos, ph))
+else:
+    print("pH OK (7,2 a 7,6).")
+
+print('\nAnálise concluída para o condomínio:', estab)
