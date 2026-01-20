@@ -10,6 +10,54 @@ cloro = float(input('Digite cloro (ppm): '))
 durez = float(input('Digite dureza cálcica (ppm): '))
 ph = float(input('Digite pH: '))
 
+# =========================
+# CONFIG / CÁLCULOS DE DOSE
+# =========================
+
+# Catálogo de cloros (ajuste/adicione marcas aqui)
+# Observação: cloro_ativo = fração (ex.: 56% => 0.56)
+produtos_cloro = {
+    "1": {
+        "nome": "GENCO Genclor (Dicloro estabilizado)",
+        "cloro_ativo": 0.56,   # 56%
+        "obs": "Rótulo indica dosagem de manutenção em g/m³ (ex.: 2 a 3 g/m³)."
+    },
+    "2": {
+        "nome": "HTH Cloro Concentrado Tradicional",
+        "cloro_ativo": 0.65,   # 65%
+        "obs": "Produto concentrado (65% cloro ativo). Siga também o rótulo para manutenção/choque."
+    },
+    "3": {
+        "nome": "Outro (informar % de cloro ativo)",
+        "cloro_ativo": None,
+        "obs": "Você vai informar a porcentagem de cloro ativo."
+    }
+}
+
+def calcular_gramas_para_aumentar_ppm(litros_piscina: float, delta_ppm: float, fracao_cloro_ativo: float) -> float:
+    """
+    1 ppm = 1 mg/L.
+    Massa de 'cloro ativo' necessária (g) = delta_ppm * litros / 1000
+    Massa do produto (g) = massa_cloro_ativo / fracao_cloro_ativo
+    """
+    if litros_piscina <= 0:
+        return 0.0
+    if delta_ppm <= 0:
+        return 0.0
+    if fracao_cloro_ativo <= 0:
+        return 0.0
+
+    gramas_cloro_ativo = (delta_ppm * litros_piscina) / 1000.0
+    gramas_produto = gramas_cloro_ativo / fracao_cloro_ativo
+    return gramas_produto
+
+# Meta de cloro (você pode ajustar)
+META_CLORO_PPM = 2.0  # dentro do ideal 1 a 3 ppm
+
+# ======================
+# RESULTADO DA ANÁLISE
+# ======================
+
 print('\n--- RESULTADO DA ANÁLISE ---')
 
 # Ácido cianúrico (ideal: 30 a 50 ppm)
@@ -28,9 +76,36 @@ elif alcal > 120:
 else:
     print('Alcalinidade OK')
 
-# Cloro (ideal: 1 a 3 ppm)
+# Cloro (ideal: 1 a 3 ppm) + DOSAGEM POR MARCA
 if cloro < 1:
     print('Cloro BAIXO → adicionar cloro')
+
+    print('\nEscolha a marca/tipo de cloro para calcular a quantidade:')
+    for k, v in produtos_cloro.items():
+        print(f"{k} - {v['nome']}")
+
+    escolha = input('Digite a opção (1/2/3): ').strip()
+    while escolha not in produtos_cloro:
+        escolha = input('Opção inválida. Digite 1, 2 ou 3: ').strip()
+
+    produto = produtos_cloro[escolha]
+
+    if escolha == "3":
+        # usuário informa a porcentagem
+        pct = float(input('Informe a % de cloro ativo do seu produto (ex.: 56 para 56%): '))
+        fracao = pct / 100.0
+        produto["cloro_ativo"] = fracao
+
+    delta = max(0.0, META_CLORO_PPM - cloro)
+    gramas = calcular_gramas_para_aumentar_ppm(litros, delta, produto["cloro_ativo"])
+
+    print(f"\nMeta de cloro considerada: {META_CLORO_PPM:.1f} ppm")
+    print(f"Cloro atual: {cloro:.2f} ppm → precisa aumentar: {delta:.2f} ppm")
+    print(f"Produto escolhido: {produto['nome']}")
+    print(f"Estimativa de dosagem: {gramas:.0f} g (aprox.)")
+    print(f"Obs.: {produto['obs']}")
+    print("Dica: dissolva/espalhe conforme o rótulo e recalcule após 1–2 horas (filtração ligada).")
+
 elif cloro > 3:
     print('Cloro ALTO → aguardar baixar')
 else:
